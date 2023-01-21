@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const { StatusCodes } = require('http-status-codes');
 const CustomError = require('../errors');
-const { attachCookiesToResponse, createTokenUser } = require('../utils');
+const { attachCookiesToResponse, createTokenUser, sendVerificationEmail } = require('../utils');
 const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
 
@@ -21,7 +21,20 @@ const register = async (req, res) => {
   const verificationToken = crypto.randomBytes(40).toString('hex');
   const user = await User.create({ name, email, password, role, verificationToken });
 
-  await sendEmail();
+const origin = req.get('origin')
+  console.log('origin',origin)
+  
+  const protocol = req.protocol
+  console.log('protocol', protocol)
+  const host = req.get('host')
+  console.log('host', host)
+
+  const forwardedHost = req.get('x-forwarded-host')
+  const forwardedProtocol = req.get('x-forwarded-proto')
+
+  console.log('forwarded host: ', forwardedHost)
+  console.log('forwarded proto: ', forwardedProtocol)
+  await sendVerificationEmail({name, email, verificationToken, origin: "http://localhost:3000"});
   //send verificstion token while testing
   res.status(StatusCodes.CREATED).json({
     msg:'success please check your email to verify account'})
