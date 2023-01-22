@@ -2,7 +2,7 @@ const User = require('../models/User');
 const Token = require('../models/Token');
 const { StatusCodes } = require('http-status-codes');
 const CustomError = require('../errors');
-const { attachCookiesToResponse, createTokenUser, sendVerificationEmail } = require('../utils');
+const { attachCookiesToResponse, createTokenUser, sendVerificationEmail, sendResetPasswordEmail, createHash } = require('../utils');
 const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
 
@@ -65,7 +65,7 @@ const login = async (req, res) => {
   //create rfresh token
 
   let refreshToken = '';
-  
+  console.log(req.ip)
   //check for existing token
   const existingToken = await Token.findOne({user:user._id})
   if(existingToken){
@@ -127,13 +127,60 @@ await user.save();
 res.status(StatusCodes.OK).json({msg:'email verified'})
 }
 
-// const forgotPassword = async (req, res)=>{
+const forgotPassword = async (req, res)=>{
+  const {email} = req.body;
+  if (!email) {
+    throw new CustomError.BadRequestError('Please provide valid email');
+  }
+
+  const user = await User.findOne({email});
+if(user){
+  const passwordToken = crypto.randomBytes(70).toString('hex')
+  //send email
+
+  const origin = "http://localhost:3000"
+  await sendResetPasswordEmail({name:user.name, email, token:passwordToken, origin})
+  const tenMinutes = 60 * 10 * 1000;
+
+  const passwordTokenExpirationDate = new Date(Date.now() + tenMinutes);
+
+  user.passwordToken = createHash(passwordToken);
+  user.passwordTokenExpirationDate = passwordTokenExpirationDate;
+  await user.save();
   
-// }
+}
+  
+  res.status(StatusCodes.OK).json({msg:'please check your email for reset password link'})
+}
+
+
+const resetPassword = async (req, res)=>{
+  const {token, email, password} = req.body;
+
+
+  if (!token ||!email ||!password) {
+    throw new CustomError.BadRequestError('Please provide valid details');
+  }
+  const user = await User.findOne({email});
+
+  if (user) {
+    const currentDate = new Date()
+
+    if(user.passwordToken === createHash(token) && user.passwordTokenExpirationDate > currentDate){
+      user.password = password
+      user.passwordToken = null
+      user.passwordTokenExpirationDate = null
+      await user.save();
+    }
+  }
+  res.send('reset password')
+}
 
 module.exports = {
   register,
   login,
   logout,
   verifyEmail,
+  resetPassword,
+  forgotPassword
 };
